@@ -669,6 +669,7 @@ function fazerLogin(){
 function fazerLogout(){
   usuarioAtual = null;
   sessionStorage.removeItem('frete_usuario');
+  if(unsubscribeLogs){ unsubscribeLogs(); unsubscribeLogs = null; }
   document.getElementById('user-box-logado').classList.add('oculto');
   document.getElementById('user-box-anonimo').classList.remove('oculto');
   document.getElementById('tab-btn-adm').classList.add('oculto');
@@ -749,11 +750,14 @@ function mostrarAba(aba){
 }
 
 /* ---------------------- FIRESTORE: TRANSPORTADORAS ---------------------- */
-async function carregarTransportadoras(){
-  const snap = await db.collection('transportadoras').get();
-  transportadoras = snap.docs.map(d=>({id:d.id, ...d.data()}));
-  popularMarcas();
-  renderizarListaAdm();
+function carregarTransportadoras(){
+  db.collection('transportadoras').onSnapshot(snap=>{
+    transportadoras = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    popularMarcas();
+    renderizarListaAdm();
+  }, erro=>{
+    console.error('Erro ao sincronizar transportadoras:', erro);
+  });
 }
 
 function popularMarcas(){
@@ -1007,7 +1011,6 @@ async function salvarTransportadora(){
     await registrarLog(usuarioAtual.nome, 'Adicionou transportadora', nome, {depois: dados});
   }
   limparFormulario();
-  carregarTransportadoras();
 }
 
 async function removerTransportadora(id){
@@ -1016,11 +1019,12 @@ async function removerTransportadora(id){
   if(!confirm('Remover "'+t.nome+'"? Essa ação não pode ser desfeita.')) return;
   await db.collection('transportadoras').doc(id).delete();
   await registrarLog(usuarioAtual.nome, 'Removeu transportadora', t.nome, {antes: t});
-  carregarTransportadoras();
 }
 
 /* ---------------------- LOGS ---------------------- */
 let logsCache = [];
+let logsExpandidos = new Set();
+let unsubscribeLogs = null;
 
 async function registrarLog(usuario, acao, detalhe, dadosCompletos){
   const entrada = { usuario, acao, detalhe, dataHora: new Date().toISOString() };
@@ -1028,12 +1032,22 @@ async function registrarLog(usuario, acao, detalhe, dadosCompletos){
   await db.collection('logs').add(entrada);
 }
 
-async function carregarLogs(dataInicioISO, dataFimISO){
+function carregarLogs(dataInicioISO, dataFimISO){
+  if(unsubscribeLogs) unsubscribeLogs();
+
   let query = db.collection('logs').orderBy('dataHora','desc');
   if(dataInicioISO) query = query.where('dataHora','>=',dataInicioISO);
   if(dataFimISO) query = query.where('dataHora','<=',dataFimISO);
-  const snap = await query.limit(200).get();
-  logsCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
+
+  unsubscribeLogs = query.limit(200).onSnapshot(snap=>{
+    logsCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    renderizarTabelaLogs();
+  }, erro=>{
+    console.error('Erro ao sincronizar histórico:', erro);
+  });
+}
+
+function renderizarTabelaLogs(){
   const corpo = document.getElementById('tabela-logs');
   corpo.innerHTML = '';
   if(logsCache.length===0){
@@ -1052,9 +1066,14 @@ async function carregarLogs(dataInicioISO, dataFimISO){
 
     const trDetalhe = document.createElement('tr');
     trDetalhe.id = 'log-detalhe-'+i;
-    trDetalhe.classList.add('oculto');
+    const aberta = logsExpandidos.has(l.id);
+    if(!aberta) trDetalhe.classList.add('oculto');
     trDetalhe.innerHTML = `<td colspan="4" style="background:#f7faf6;"><div id="log-detalhe-conteudo-${i}" style="padding:8px 4px;"></div></td>`;
     corpo.appendChild(trDetalhe);
+    if(aberta){
+      const html = l.dadosCompletos ? formatarDadosLog(l.dadosCompletos) : `<p class="status">${l.detalhe}</p>`;
+      trDetalhe.querySelector('div').innerHTML = html;
+    }
   });
 }
 
@@ -1098,19 +1117,16 @@ async function verDetalheUltimaAlteracao(){
 }
 
 function alternarDetalheLog(i){
+  const l = logsCache[i];
   const linhaDetalhe = document.getElementById('log-detalhe-'+i);
-  const jaAberta = !linhaDetalhe.classList.contains('oculto');
+  const jaAberta = logsExpandidos.has(l.id);
   if(jaAberta){
+    logsExpandidos.delete(l.id);
     linhaDetalhe.classList.add('oculto');
     return;
   }
-  const l = logsCache[i];
-  let html = '';
-  if(l.dadosCompletos){
-    html = formatarDadosLog(l.dadosCompletos);
-  } else {
-    html = `<p class="status">${l.detalhe}</p>`;
-  }
+  logsExpandidos.add(l.id);
+  const html = l.dadosCompletos ? formatarDadosLog(l.dadosCompletos) : `<p class="status">${l.detalhe}</p>`;
   document.getElementById('log-detalhe-conteudo-'+i).innerHTML = html;
   linhaDetalhe.classList.remove('oculto');
 }
