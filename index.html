@@ -426,9 +426,7 @@
     <div id="aba-adm" class="oculto">
       <div class="card">
         <h2>Transportadoras cadastradas</h2>
-        <button class="btn secundario" onclick="importarDadosIniciais()">Importar dados da tabela original</button>
-        <div class="status" style="margin-top:6px;">Importa só o que ainda não está cadastrado — não duplica o que você já adicionou.</div>
-        <div id="lista-transportadoras" style="margin-top:16px;"></div>
+        <div id="lista-transportadoras"></div>
       </div>
 
       <div class="card">
@@ -483,7 +481,23 @@
     <div id="aba-log" class="oculto">
       <div class="card">
         <h2>Histórico de alterações</h2>
-        <table>
+        <button class="btn secundario" onclick="verUltimaAlteracao()">Data da última alteração</button>
+        <div id="ultima-alteracao-resumo" class="aviso oculto" style="margin-top:10px;"></div>
+        <div class="row" style="margin-top:16px;">
+          <div>
+            <label>De</label>
+            <input type="date" id="log-filtro-inicio">
+          </div>
+          <div>
+            <label>Até</label>
+            <input type="date" id="log-filtro-fim">
+          </div>
+        </div>
+        <div class="form-inline-actions">
+          <button class="btn pequeno" onclick="filtrarLogs()">Filtrar</button>
+          <button class="btn secundario pequeno" onclick="limparFiltroLogs()">Limpar filtro</button>
+        </div>
+        <table style="margin-top:16px;">
           <thead>
             <tr><th>Data/Hora</th><th>Usuário</th><th>Ação</th><th>Detalhe</th></tr>
           </thead>
@@ -711,26 +725,6 @@ async function carregarTransportadoras(){
   transportadoras = snap.docs.map(d=>({id:d.id, ...d.data()}));
   popularMarcas();
   renderizarListaAdm();
-}
-
-async function importarDadosIniciais(){
-  const existentes = new Set(transportadoras.map(t => (t.nome+'|'+t.origem).toUpperCase()));
-  const faltando = SEED_TRANSPORTADORAS.filter(t => !existentes.has((t.nome+'|'+t.origem).toUpperCase()));
-
-  if(faltando.length === 0){
-    alert('Todas as transportadoras da tabela original já estão cadastradas.');
-    return;
-  }
-  if(!confirm('Isso vai importar ' + faltando.length + ' transportadora(s) que ainda não estão cadastradas. Continuar?')) return;
-
-  const batch = db.batch();
-  faltando.forEach(t=>{
-    const ref = db.collection('transportadoras').doc();
-    batch.set(ref, t);
-  });
-  await batch.commit();
-  await registrarLog(usuarioAtual.nome, 'Importou dados iniciais', faltando.length + ' transportadora(s): ' + faltando.map(t=>t.nome).join(', '), {transportadoras: faltando});
-  carregarTransportadoras();
 }
 
 function popularMarcas(){
@@ -970,11 +964,12 @@ async function salvarTransportadora(){
   }
 
   if(id){
+    const antes = transportadoras.find(x=>x.id===id);
     await db.collection('transportadoras').doc(id).set(dados);
-    await registrarLog(usuarioAtual.nome, 'Editou transportadora', nome, dados);
+    await registrarLog(usuarioAtual.nome, 'Editou transportadora', nome, {antes, depois: dados});
   } else {
     await db.collection('transportadoras').add(dados);
-    await registrarLog(usuarioAtual.nome, 'Adicionou transportadora', nome, dados);
+    await registrarLog(usuarioAtual.nome, 'Adicionou transportadora', nome, {depois: dados});
   }
   limparFormulario();
   carregarTransportadoras();
@@ -985,7 +980,7 @@ async function removerTransportadora(id){
   if(!t) return;
   if(!confirm('Remover "'+t.nome+'"? Essa ação não pode ser desfeita.')) return;
   await db.collection('transportadoras').doc(id).delete();
-  await registrarLog(usuarioAtual.nome, 'Removeu transportadora', t.nome, t);
+  await registrarLog(usuarioAtual.nome, 'Removeu transportadora', t.nome, {antes: t});
   carregarTransportadoras();
 }
 
@@ -998,11 +993,18 @@ async function registrarLog(usuario, acao, detalhe, dadosCompletos){
   await db.collection('logs').add(entrada);
 }
 
-async function carregarLogs(){
-  const snap = await db.collection('logs').orderBy('dataHora','desc').limit(100).get();
+async function carregarLogs(dataInicioISO, dataFimISO){
+  let query = db.collection('logs').orderBy('dataHora','desc');
+  if(dataInicioISO) query = query.where('dataHora','>=',dataInicioISO);
+  if(dataFimISO) query = query.where('dataHora','<=',dataFimISO);
+  const snap = await query.limit(200).get();
   logsCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
   const corpo = document.getElementById('tabela-logs');
   corpo.innerHTML = '';
+  if(logsCache.length===0){
+    corpo.innerHTML = '<tr><td colspan="4" class="status">Nenhuma alteração encontrada nesse período.</td></tr>';
+    return;
+  }
   logsCache.forEach((l,i)=>{
     const dt = new Date(l.dataHora);
     const tr = document.createElement('tr');
@@ -1014,17 +1016,54 @@ async function carregarLogs(){
   });
 }
 
+function filtrarLogs(){
+  const ini = document.getElementById('log-filtro-inicio').value;
+  const fim = document.getElementById('log-filtro-fim').value;
+  const iniISO = ini ? new Date(ini+'T00:00:00').toISOString() : null;
+  const fimISO = fim ? new Date(fim+'T23:59:59').toISOString() : null;
+  carregarLogs(iniISO, fimISO);
+}
+
+function limparFiltroLogs(){
+  document.getElementById('log-filtro-inicio').value = '';
+  document.getElementById('log-filtro-fim').value = '';
+  carregarLogs();
+}
+
+let ultimaAlteracaoCache = null;
+
+async function verUltimaAlteracao(){
+  const snap = await db.collection('logs').orderBy('dataHora','desc').limit(1).get();
+  const box = document.getElementById('ultima-alteracao-resumo');
+  if(snap.empty){
+    box.textContent = 'Ainda não há nenhuma alteração registrada.';
+    box.classList.remove('oculto');
+    return;
+  }
+  const doc = snap.docs[0];
+  ultimaAlteracaoCache = {id:doc.id, ...doc.data()};
+  const dt = new Date(ultimaAlteracaoCache.dataHora);
+  box.innerHTML = `Última alteração: <strong>${dt.toLocaleString('pt-BR')}</strong> por <strong>${ultimaAlteracaoCache.usuario}</strong> (${ultimaAlteracaoCache.acao}) — <a href="#" onclick="verDetalheUltimaAlteracao();return false;" style="color:var(--verde-escuro);font-weight:600;">ver detalhe</a>`;
+  box.classList.remove('oculto');
+}
+
+function verDetalheUltimaAlteracao(){
+  if(!ultimaAlteracaoCache) return;
+  logsCache = [ultimaAlteracaoCache, ...logsCache.filter(l=>l.id!==ultimaAlteracaoCache.id)];
+  verDetalheLog(0);
+}
+
 function verDetalheLog(i){
   const l = logsCache[i];
   const dt = new Date(l.dataHora);
   let html = `<p><strong>Usuário:</strong> ${l.usuario}</p>`;
   html += `<p><strong>Data/hora:</strong> ${dt.toLocaleString('pt-BR')}</p>`;
   html += `<p><strong>Ação:</strong> ${l.acao}</p>`;
-  html += `<p><strong>Resumo:</strong> ${l.detalhe}</p>`;
   if(l.dadosCompletos){
     html += '<hr style="border:none;border-top:1px solid var(--borda);margin:12px 0;">';
-    html += '<p><strong>Dados completos:</strong></p>';
     html += formatarDadosLog(l.dadosCompletos);
+  } else {
+    html += `<p><strong>Resumo:</strong> ${l.detalhe}</p>`;
   }
   document.getElementById('log-detalhe-conteudo').innerHTML = html;
   document.getElementById('tela-detalhe-log').classList.remove('oculto');
@@ -1034,25 +1073,78 @@ function fecharDetalheLog(){
   document.getElementById('tela-detalhe-log').classList.add('oculto');
 }
 
+const CAMPOS_LOG = [
+  { chave:'nome', rotulo:'Nome' },
+  { chave:'origem', rotulo:'Origem' },
+  { chave:'marcas', rotulo:'Marcas', lista:true },
+  { chave:'tipoCalculo', rotulo:'Forma de cálculo' },
+  { chave:'valor', rotulo:'Valor', moeda:true },
+  { chave:'valorPallet', rotulo:'Valor por pallet', moeda:true },
+  { chave:'adicionalGrandeFormato', rotulo:'Adicional formato grande (2%)', booleano:true }
+];
+
+function formatarValorCampo(campo, valor){
+  if(valor === undefined || valor === null || valor === '') return '—';
+  if(campo.lista) return Array.isArray(valor) ? valor.join(', ') : valor;
+  if(campo.moeda) return 'R$ ' + Number(valor).toFixed(2);
+  if(campo.booleano) return valor ? 'Sim' : 'Não';
+  return String(valor);
+}
+
 function formatarDadosLog(d){
-  // suporta tanto uma transportadora única quanto uma lista (importação em lote)
-  const lista = Array.isArray(d.transportadoras) ? d.transportadoras : [d];
-  return lista.map(t=>{
-    let linhas = `<div class="grupo-pallet">`;
-    linhas += `<strong>${t.nome||''}</strong> — ${t.origem||''}<br>`;
-    linhas += `Marcas: ${(t.marcas||[]).join(', ')}<br>`;
-    if(t.tipoCalculo === 'pallet'){
-      linhas += `Cálculo por pallet · Valor por pallet: R$ ${Number(t.valorPallet||0).toFixed(2)}<br>`;
-      (t.gruposPallet||[]).forEach(g=>{
-        linhas += `&nbsp;&nbsp;· ${g.formatos}: 1 pallet = ${g.pesoPallet} kg<br>`;
-      });
-    } else {
-      linhas += `Cálculo por peso · Valor: R$ ${Number(t.valor||0).toFixed(2)}<br>`;
-    }
-    linhas += `Adicional formato grande (2%): ${t.adicionalGrandeFormato ? 'Sim' : 'Não'}`;
-    linhas += `</div>`;
-    return linhas;
-  }).join('');
+  // importação em lote (várias transportadoras de uma vez)
+  if(d.transportadoras){
+    return d.transportadoras.map(t=>{
+      let linhas = `<div class="grupo-pallet"><strong>${t.nome||''}</strong> — ${t.origem||''}<br>`;
+      linhas += `Marcas: ${(t.marcas||[]).join(', ')}<br>`;
+      linhas += t.tipoCalculo==='pallet' ? `Por pallet · R$ ${Number(t.valorPallet||0).toFixed(2)}` : `Por peso · R$ ${Number(t.valor||0).toFixed(2)}`;
+      linhas += `</div>`;
+      return linhas;
+    }).join('');
+  }
+
+  // remoção: só existe "antes"
+  if(d.antes && !d.depois){
+    return '<p style="color:var(--erro);font-weight:600;">Transportadora removida:</p>' + renderizarFichaCompleta(d.antes);
+  }
+
+  // criação: só existe "depois"
+  if(d.depois && !d.antes){
+    return '<p style="color:var(--verde-escuro);font-weight:600;">Transportadora criada:</p>' + renderizarFichaCompleta(d.depois);
+  }
+
+  // edição: mostra o que mudou, campo a campo (antes → depois)
+  if(d.antes && d.depois){
+    let html = '';
+    CAMPOS_LOG.forEach(campo=>{
+      const antes = formatarValorCampo(campo, d.antes[campo.chave]);
+      const depois = formatarValorCampo(campo, d.depois[campo.chave]);
+      if(antes !== depois){
+        html += `<div class="grupo-pallet"><strong>${campo.rotulo}</strong><br>`;
+        html += `<span style="color:var(--erro);">Antes: ${antes}</span><br>`;
+        html += `<span style="color:var(--verde-escuro);">Depois: ${depois}</span></div>`;
+      }
+    });
+    if(!html) html = '<p class="status">Nenhum campo alterado (apenas resalvou os mesmos dados).</p>';
+    return html;
+  }
+
+  return '<p class="status">Sem detalhes adicionais.</p>';
+}
+
+function renderizarFichaCompleta(t){
+  let linhas = `<div class="grupo-pallet">`;
+  CAMPOS_LOG.forEach(campo=>{
+    if(t[campo.chave]===undefined) return;
+    linhas += `<strong>${campo.rotulo}:</strong> ${formatarValorCampo(campo, t[campo.chave])}<br>`;
+  });
+  if(t.gruposPallet){
+    (t.gruposPallet||[]).forEach(g=>{
+      linhas += `&nbsp;&nbsp;· ${g.formatos}: 1 pallet = ${g.pesoPallet} kg<br>`;
+    });
+  }
+  linhas += `</div>`;
+  return linhas;
 }
 
 alternarTipoCalculoForm();
