@@ -124,6 +124,21 @@
   }
   .checkbox-row input{width:auto;}
   .checkbox-row label{margin:0;font-weight:500;color:var(--texto);}
+  .campo-senha{position:relative;}
+  .campo-senha input{padding-right:44px;}
+  .campo-senha .olho-btn{
+    position:absolute;
+    right:6px;
+    top:50%;
+    transform:translateY(-50%);
+    background:none;
+    border:none;
+    cursor:pointer;
+    font-size:18px;
+    padding:6px;
+    line-height:1;
+    color:var(--texto-suave);
+  }
   .btn{
     display:inline-block;
     background:var(--verde);
@@ -314,7 +329,10 @@
       <option value="">Selecione...</option>
     </select>
     <label>Senha</label>
-    <input type="password" id="login-senha" placeholder="Digite sua senha">
+    <div class="campo-senha">
+      <input type="password" id="login-senha" placeholder="Digite sua senha">
+      <button type="button" class="olho-btn" onclick="alternarSenhaVisivel('login-senha', this)">👁</button>
+    </div>
     <button class="btn" onclick="fazerLogin()">Entrar</button>
     <button class="btn secundario" style="margin-top:8px" onclick="fecharLoginModal()">Cancelar</button>
     <div class="erro-msg" id="login-erro"></div>
@@ -327,23 +345,23 @@
     <h1>Trocar senha</h1>
     <p id="trocar-senha-usuario"></p>
     <label>Senha atual</label>
-    <input type="password" id="ts-senha-atual" placeholder="Digite sua senha atual">
+    <div class="campo-senha">
+      <input type="password" id="ts-senha-atual" placeholder="Digite sua senha atual">
+      <button type="button" class="olho-btn" onclick="alternarSenhaVisivel('ts-senha-atual', this)">👁</button>
+    </div>
     <label>Nova senha</label>
-    <input type="password" id="ts-senha-nova" placeholder="Digite a nova senha">
+    <div class="campo-senha">
+      <input type="password" id="ts-senha-nova" placeholder="Digite a nova senha">
+      <button type="button" class="olho-btn" onclick="alternarSenhaVisivel('ts-senha-nova', this)">👁</button>
+    </div>
     <label>Confirmar nova senha</label>
-    <input type="password" id="ts-senha-confirma" placeholder="Repita a nova senha">
+    <div class="campo-senha">
+      <input type="password" id="ts-senha-confirma" placeholder="Repita a nova senha">
+      <button type="button" class="olho-btn" onclick="alternarSenhaVisivel('ts-senha-confirma', this)">👁</button>
+    </div>
     <button class="btn" onclick="salvarNovaSenha()">Salvar nova senha</button>
     <button class="btn secundario" style="margin-top:8px" onclick="fecharTrocarSenhaModal()">Cancelar</button>
     <div class="erro-msg" id="ts-erro"></div>
-  </div>
-</div>
-
-<!-- ===================== MODAL DE DETALHE DO LOG ===================== -->
-<div id="tela-detalhe-log" class="login-wrap oculto" style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:100;">
-  <div class="login-card" style="max-width:480px;max-height:80vh;overflow-y:auto;text-align:left;">
-    <h1 style="text-align:left;">Detalhe da alteração</h1>
-    <div id="log-detalhe-conteudo" style="font-size:14px;line-height:1.5;"></div>
-    <button class="btn secundario" style="margin-top:16px;width:100%;" onclick="fecharDetalheLog()">Fechar</button>
   </div>
 </div>
 
@@ -582,6 +600,17 @@ let transportadoras = [];
 let gruposPalletTemp = [];
 
 /* ---------------------- LOGIN ---------------------- */
+function alternarSenhaVisivel(idCampo, btn){
+  const input = document.getElementById(idCampo);
+  if(input.type === 'password'){
+    input.type = 'text';
+    btn.textContent = '🙈';
+  } else {
+    input.type = 'password';
+    btn.textContent = '👁';
+  }
+}
+
 async function carregarUsuarios(){
   const snap = await db.collection('usuarios').get();
   if(snap.empty){
@@ -966,7 +995,13 @@ async function salvarTransportadora(){
   if(id){
     const antes = transportadoras.find(x=>x.id===id);
     await db.collection('transportadoras').doc(id).set(dados);
-    await registrarLog(usuarioAtual.nome, 'Editou transportadora', nome, {antes, depois: dados});
+    const camposAlterados = CAMPOS_LOG
+      .filter(c => formatarValorCampo(c, antes[c.chave]) !== formatarValorCampo(c, dados[c.chave]))
+      .map(c => c.rotulo);
+    const acaoDetalhada = camposAlterados.length
+      ? 'Editou ' + camposAlterados.join(', ').toLowerCase()
+      : 'Editou transportadora (sem mudanças)';
+    await registrarLog(usuarioAtual.nome, acaoDetalhada, nome, {antes, depois: dados});
   } else {
     await db.collection('transportadoras').add(dados);
     await registrarLog(usuarioAtual.nome, 'Adicionou transportadora', nome, {depois: dados});
@@ -1009,10 +1044,17 @@ async function carregarLogs(dataInicioISO, dataFimISO){
     const dt = new Date(l.dataHora);
     const tr = document.createElement('tr');
     tr.style.cursor = 'pointer';
-    tr.title = 'Toque para ver os detalhes completos';
+    tr.title = 'Toque para ver os detalhes';
+    tr.id = 'log-linha-'+i;
     tr.innerHTML = `<td>${dt.toLocaleString('pt-BR')}</td><td>${l.usuario}</td><td>${l.acao}</td><td>${l.detalhe}</td>`;
-    tr.onclick = ()=>verDetalheLog(i);
+    tr.onclick = ()=>alternarDetalheLog(i);
     corpo.appendChild(tr);
+
+    const trDetalhe = document.createElement('tr');
+    trDetalhe.id = 'log-detalhe-'+i;
+    trDetalhe.classList.add('oculto');
+    trDetalhe.innerHTML = `<td colspan="4" style="background:#f7faf6;"><div id="log-detalhe-conteudo-${i}" style="padding:8px 4px;"></div></td>`;
+    corpo.appendChild(trDetalhe);
   });
 }
 
@@ -1047,30 +1089,30 @@ async function verUltimaAlteracao(){
   box.classList.remove('oculto');
 }
 
-function verDetalheUltimaAlteracao(){
-  if(!ultimaAlteracaoCache) return;
-  logsCache = [ultimaAlteracaoCache, ...logsCache.filter(l=>l.id!==ultimaAlteracaoCache.id)];
-  verDetalheLog(0);
+async function verDetalheUltimaAlteracao(){
+  document.getElementById('log-filtro-inicio').value = '';
+  document.getElementById('log-filtro-fim').value = '';
+  await carregarLogs();
+  alternarDetalheLog(0);
+  document.getElementById('log-linha-0').scrollIntoView({behavior:'smooth', block:'center'});
 }
 
-function verDetalheLog(i){
-  const l = logsCache[i];
-  const dt = new Date(l.dataHora);
-  let html = `<p><strong>Usuário:</strong> ${l.usuario}</p>`;
-  html += `<p><strong>Data/hora:</strong> ${dt.toLocaleString('pt-BR')}</p>`;
-  html += `<p><strong>Ação:</strong> ${l.acao}</p>`;
-  if(l.dadosCompletos){
-    html += '<hr style="border:none;border-top:1px solid var(--borda);margin:12px 0;">';
-    html += formatarDadosLog(l.dadosCompletos);
-  } else {
-    html += `<p><strong>Resumo:</strong> ${l.detalhe}</p>`;
+function alternarDetalheLog(i){
+  const linhaDetalhe = document.getElementById('log-detalhe-'+i);
+  const jaAberta = !linhaDetalhe.classList.contains('oculto');
+  if(jaAberta){
+    linhaDetalhe.classList.add('oculto');
+    return;
   }
-  document.getElementById('log-detalhe-conteudo').innerHTML = html;
-  document.getElementById('tela-detalhe-log').classList.remove('oculto');
-}
-
-function fecharDetalheLog(){
-  document.getElementById('tela-detalhe-log').classList.add('oculto');
+  const l = logsCache[i];
+  let html = '';
+  if(l.dadosCompletos){
+    html = formatarDadosLog(l.dadosCompletos);
+  } else {
+    html = `<p class="status">${l.detalhe}</p>`;
+  }
+  document.getElementById('log-detalhe-conteudo-'+i).innerHTML = html;
+  linhaDetalhe.classList.remove('oculto');
 }
 
 const CAMPOS_LOG = [
