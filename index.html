@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calculadora de Frete — AC Coelho</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+  :root{
+    --verde:#11652F;
+    --verde-escuro:#0c4a22;
+    --laranja:#F37916;
+    --laranja-escuro:#d9660a;
+    --bg:#f4f6f4;
+    --card:#ffffff;
+    --texto:#20291f;
+    --texto-suave:#5c6b58;
+    --borda:#dfe6dd;
+    --erro:#c0392b;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:'Segoe UI',Roboto,Arial,sans-serif;
+    background:var(--bg);
+    color:var(--texto);
+  }
+  header{
+    background:linear-gradient(90deg,var(--verde) 0%,var(--verde-escuro) 100%);
+    color:#fff;
+    padding:16px 24px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:10px;
+  }
+  header h1{
+    margin:0;
+    font-size:20px;
+    font-weight:600;
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  header h1 .tag{
+    background:var(--laranja);
+    color:#fff;
+    font-size:11px;
+    padding:3px 8px;
+    border-radius:20px;
+    font-weight:700;
+    letter-spacing:.5px;
+  }
+  .user-box{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    font-size:14px;
+  }
+  .user-box button{
+    background:var(--laranja);
+    border:none;
+    color:#fff;
+    padding:7px 14px;
+    border-radius:6px;
+    cursor:pointer;
+    font-weight:600;
+    font-size:13px;
+  }
+  .user-box button:hover{background:var(--laranja-escuro);}
+  main{
+    max-width:960px;
+    margin:0 auto;
+    padding:24px 16px 60px;
+  }
+  .card{
+    background:var(--card);
+    border:1px solid var(--borda);
+    border-radius:12px;
+    padding:22px;
+    margin-bottom:20px;
+    box-shadow:0 1px 3px rgba(0,0,0,.04);
+  }
+  .card h2{
+    margin:0 0 16px;
+    font-size:16px;
+    color:var(--verde-escuro);
+    border-left:4px solid var(--laranja);
+    padding-left:10px;
+  }
+  label{
+    display:block;
+    font-size:13px;
+    font-weight:600;
+    color:var(--texto-suave);
+    margin:12px 0 5px;
+  }
+  select,input[type=text],input[type=password],input[type=number]{
+    width:100%;
+    padding:10px 12px;
+    border:1px solid var(--borda);
+    border-radius:8px;
+    font-size:14px;
+    background:#fff;
+    color:var(--texto);
+  }
+  select:focus,input:focus{
+    outline:none;
+    border-color:var(--verde);
+  }
+  .row{display:flex;gap:14px;flex-wrap:wrap;}
+  .row>div{flex:1;min-width:180px;}
+  .checkbox-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    margin-top:14px;
+    background:#fff8ee;
+    border:1px solid #ffe1b3;
+    padding:10px 12px;
+    border-radius:8px;
+  }
+  .checkbox-row input{width:auto;}
+  .checkbox-row label{margin:0;font-weight:500;color:var(--texto);}
+  .btn{
+    display:inline-block;
+    background:var(--verde);
+    color:#fff;
+    border:none;
+    padding:11px 22px;
+    border-radius:8px;
+    font-size:14px;
+    font-weight:600;
+    cursor:pointer;
+    margin-top:16px;
+  }
+  .btn:hover{background:var(--verde-escuro);}
+  .btn.secundario{
+    background:#fff;
+    color:var(--verde);
+    border:1px solid var(--verde);
+  }
+  .btn.secundario:hover{background:#eef6ee;}
+  .btn.perigo{background:var(--erro);}
+  .btn.perigo:hover{background:#a2321f;}
+  .btn.pequeno{padding:6px 12px;font-size:12px;margin-top:0;}
+  .resultado{
+    margin-top:20px;
+    padding:20px;
+    border-radius:10px;
+    background:linear-gradient(135deg,#eef8ef,#fff);
+    border:1px solid #cfe8d2;
+    text-align:center;
+  }
+  .resultado .valor{
+    font-size:34px;
+    font-weight:800;
+    color:var(--verde-escuro);
+  }
+  .resultado .detalhe{
+    font-size:13px;
+    color:var(--texto-suave);
+    margin-top:6px;
+  }
+  table{
+    width:100%;
+    border-collapse:collapse;
+    font-size:13px;
+  }
+  th,td{
+    text-align:left;
+    padding:9px 10px;
+    border-bottom:1px solid var(--borda);
+  }
+  th{
+    background:#f0f4ef;
+    color:var(--verde-escuro);
+    font-size:12px;
+    text-transform:uppercase;
+    letter-spacing:.4px;
+  }
+  tr:hover td{background:#fafcf9;}
+  .tag-pill{
+    display:inline-block;
+    background:#e9f3ea;
+    color:var(--verde-escuro);
+    font-size:11px;
+    padding:2px 8px;
+    border-radius:20px;
+    margin:2px 3px 2px 0;
+  }
+  .tabs{
+    display:flex;
+    gap:6px;
+    margin-bottom:18px;
+    flex-wrap:wrap;
+  }
+  .tabs button{
+    background:#fff;
+    border:1px solid var(--borda);
+    color:var(--texto-suave);
+    padding:9px 16px;
+    border-radius:8px 8px 0 0;
+    cursor:pointer;
+    font-weight:600;
+    font-size:13px;
+  }
+  .tabs button.ativo{
+    background:var(--verde);
+    color:#fff;
+    border-color:var(--verde);
+  }
+  .oculto{display:none !important;}
+  .login-wrap{
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:linear-gradient(135deg,var(--verde) 0%,var(--verde-escuro) 60%);
+    padding:20px;
+  }
+  .login-card{
+    background:#fff;
+    border-radius:16px;
+    padding:36px 32px;
+    width:100%;
+    max-width:360px;
+    box-shadow:0 12px 40px rgba(0,0,0,.25);
+  }
+  .login-card h1{
+    text-align:center;
+    color:var(--verde-escuro);
+    font-size:20px;
+    margin-bottom:4px;
+  }
+  .login-card p{
+    text-align:center;
+    color:var(--texto-suave);
+    font-size:13px;
+    margin-top:0;
+    margin-bottom:20px;
+  }
+  .login-card .btn{width:100%;text-align:center;}
+  .erro-msg{
+    color:var(--erro);
+    font-size:13px;
+    margin-top:10px;
+    text-align:center;
+    min-height:16px;
+  }
+  .badge-adm{
+    background:var(--laranja);
+    color:#fff;
+    font-size:10px;
+    padding:2px 7px;
+    border-radius:10px;
+    margin-left:6px;
+    font-weight:700;
+  }
+  .form-inline-actions{
+    display:flex;
+    gap:8px;
+    margin-top:16px;
+  }
+  .aviso{
+    background:#fff8ee;
+    border:1px solid #ffe1b3;
+    color:#8a5a12;
+    padding:10px 14px;
+    border-radius:8px;
+    font-size:13px;
+    margin-bottom:16px;
+  }
+  .status{
+    font-size:12px;
+    color:var(--texto-suave);
+    text-align:center;
+    margin-top:10px;
+  }
+  .grupo-pallet{
+    border:1px dashed var(--borda);
+    border-radius:8px;
+    padding:10px;
+    margin-top:10px;
+    font-size:13px;
+  }
+  .lista-remover{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:6px 0;
+    border-bottom:1px solid var(--borda);
+    font-size:13px;
+  }
+  footer{
+    text-align:center;
+    font-size:12px;
+    color:var(--texto-suave);
+    padding:20px;
+  }
+</style>
+</head>
+<body>
+
+<!-- ===================== MODAL DE LOGIN (ADM) ===================== -->
+<div id="tela-login" class="login-wrap oculto" style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:100;">
+  <div class="login-card">
+    <h1>Área ADM</h1>
+    <p>Login necessário só para gerenciar valores</p>
+    <label>Usuário</label>
+    <select id="login-usuario">
+      <option value="">Selecione...</option>
+    </select>
+    <label>Senha</label>
+    <input type="password" id="login-senha" placeholder="Digite sua senha">
+    <button class="btn" onclick="fazerLogin()">Entrar</button>
+    <button class="btn secundario" style="margin-top:8px" onclick="fecharLoginModal()">Cancelar</button>
+    <div class="erro-msg" id="login-erro"></div>
+  </div>
+</div>
+
+<!-- ===================== APP PRINCIPAL ===================== -->
+<div id="app">
+  <header>
+    <h1>Calculadora de Frete <span class="tag">AC COELHO</span></h1>
+    <div class="user-box" id="user-box-anonimo">
+      <button onclick="abrirLoginModal()">Login ADM</button>
+    </div>
+    <div class="user-box oculto" id="user-box-logado">
+      <span id="usuario-logado"></span>
+      <button onclick="fazerLogout()">Sair</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="tabs">
+      <button id="tab-btn-calc" class="ativo" onclick="mostrarAba('calc')">Calcular Frete</button>
+      <button id="tab-btn-adm" class="oculto" onclick="mostrarAba('adm')">Gerenciar (ADM)</button>
+      <button id="tab-btn-log" class="oculto" onclick="mostrarAba('log')">Histórico de Alterações</button>
+    </div>
+
+    <!-- ABA CALCULADORA -->
+    <div id="aba-calc">
+      <div class="card">
+        <h2>Calcular valor do frete</h2>
+        <div class="row">
+          <div>
+            <label>Marca</label>
+            <select id="calc-marca" onchange="aoSelecionarMarca()">
+              <option value="">Selecione a marca...</option>
+            </select>
+          </div>
+          <div>
+            <label>Transportadora</label>
+            <select id="calc-transportadora" onchange="aoSelecionarTransportadora()" disabled>
+              <option value="">Selecione a marca primeiro</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="bloco-peso" class="oculto">
+          <label>Peso (kg por m²)</label>
+          <input type="number" id="calc-peso" step="0.01" placeholder="Ex: 10,26">
+          <div class="checkbox-row">
+            <input type="checkbox" id="calc-formato-grande">
+            <label for="calc-formato-grande">Formato grande (a partir de 120x120) — soma 2% sobre o valor</label>
+          </div>
+        </div>
+
+        <div id="bloco-pallet" class="oculto">
+          <div class="row">
+            <div>
+              <label>Formato do produto</label>
+              <select id="calc-formato-pallet"></select>
+            </div>
+            <div>
+              <label>Peso total do pedido (kg)</label>
+              <input type="number" id="calc-peso-pedido" step="0.01" placeholder="Ex: 5000">
+            </div>
+          </div>
+          <div class="checkbox-row">
+            <input type="checkbox" id="calc-formato-grande-pallet">
+            <label for="calc-formato-grande-pallet">Formato grande (a partir de 120x120) — soma 2% sobre o valor</label>
+          </div>
+        </div>
+
+        <button class="btn" id="btn-calcular" onclick="calcularFrete()" disabled>Calcular</button>
+
+        <div id="resultado" class="resultado oculto">
+          <div class="valor" id="resultado-valor">R$ 0,00</div>
+          <div class="detalhe" id="resultado-detalhe"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ABA ADM -->
+    <div id="aba-adm" class="oculto">
+      <div class="card">
+        <h2>Transportadoras cadastradas</h2>
+        <div id="lista-transportadoras"></div>
+      </div>
+
+      <div class="card">
+        <h2 id="form-titulo">Adicionar transportadora</h2>
+        <input type="hidden" id="edit-id">
+        <div class="row">
+          <div>
+            <label>Nome da transportadora</label>
+            <input type="text" id="f-nome" placeholder="Ex: FONTANELLA (ANDERSON)">
+          </div>
+          <div>
+            <label>Origem / Região</label>
+            <input type="text" id="f-origem" placeholder="Ex: Criciúma/Urussanga - SC">
+          </div>
+        </div>
+        <label>Marcas atendidas (separe por vírgula)</label>
+        <input type="text" id="f-marcas" placeholder="Ex: CEUSA, DECORTILES, ELIANE">
+
+        <label>Forma de cálculo</label>
+        <select id="f-tipo-calculo" onchange="alternarTipoCalculoForm()">
+          <option value="peso">Por peso (kg/m²)</option>
+          <option value="pallet">Por pallet (espaço no veículo)</option>
+        </select>
+
+        <div id="f-bloco-peso">
+          <label>Valor da transportadora (R$)</label>
+          <input type="number" id="f-valor" step="0.01" placeholder="Ex: 470.00">
+          <div class="status">Cálculo: peso (kg/m²) × (valor ÷ 1000)</div>
+        </div>
+
+        <div id="f-bloco-pallet" class="oculto">
+          <label>Valor por pallet (R$)</label>
+          <input type="number" id="f-valor-pallet" step="0.01" placeholder="Ex: 495.00">
+          <label>Grupos de formato e peso por pallet</label>
+          <div id="f-grupos-pallet"></div>
+          <button type="button" class="btn secundario pequeno" onclick="adicionarGrupoPallet()">+ Adicionar grupo de formato</button>
+        </div>
+
+        <div class="checkbox-row">
+          <input type="checkbox" id="f-adicional-grande">
+          <label for="f-adicional-grande">Permite adicional de 2% para formato grande (120x120+)</label>
+        </div>
+
+        <div class="form-inline-actions">
+          <button class="btn" onclick="salvarTransportadora()">Salvar</button>
+          <button class="btn secundario" onclick="limparFormulario()">Cancelar edição</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ABA LOG -->
+    <div id="aba-log" class="oculto">
+      <div class="card">
+        <h2>Histórico de alterações</h2>
+        <table>
+          <thead>
+            <tr><th>Data/Hora</th><th>Usuário</th><th>Ação</th><th>Detalhe</th></tr>
+          </thead>
+          <tbody id="tabela-logs"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <footer>Calculadora de Frete — AC Coelho · dados sincronizados via Firebase</footer>
+</div>
+
+<script>
+/* ======================================================================
+   CONFIGURAÇÃO DO FIREBASE
+   Substitua os valores abaixo pelas credenciais do SEU projeto Firebase.
+   (Firebase Console → Configurações do projeto → Seus apps → SDK setup)
+   ====================================================================== */
+const firebaseConfig = {
+  apiKey: "AIzaSyDTZGvzd2Hb2Fa4_d71gjWeAVSSbJX20ZU",
+  authDomain: "calculo-frete-b3948.firebaseapp.com",
+  projectId: "calculo-frete-b3948",
+  storageBucket: "calculo-frete-b3948.firebasestorage.app",
+  messagingSenderId: "147929688868",
+  appId: "1:147929688868:web:01c17552e4352e39f9a1b1"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+/* ======================================================================
+   USUÁRIOS (todos ADM)
+   Ajuste as senhas abaixo antes de publicar. Uso interno na intranet.
+   ====================================================================== */
+const USUARIOS = [
+  { nome: "Monica",   senha: "monica123",   adm: true },
+  { nome: "Adelson",  senha: "adelson123",  adm: true },
+  { nome: "Guilherme",senha: "guilherme123",adm: true },
+  { nome: "Luiz",     senha: "luiz123",     adm: true }
+];
+
+/* ======================================================================
+   DADOS INICIAIS (extraídos da tabela enviada)
+   Carregados automaticamente na primeira vez que o Firestore estiver vazio.
+   Confira/ajuste no painel ADM depois — algumas transportadoras não
+   especificavam marca exata, foram associadas a todas as marcas do grupo.
+   ====================================================================== */
+const SEED_TRANSPORTADORAS = [
+  { nome:"SUL GOIAS (JOSÉ)", origem:"Criciúma/Urussanga - SC", marcas:["DECORTILES","ELIANE","ELIZABETH"], valor:435.00, tipoCalculo:"peso", adicionalGrandeFormato:false },
+  { nome:"UNIVERSO TRANSPORTES - 3BF (DANILO BONGIOLO)", origem:"Criciúma/Urussanga - SC", marcas:["CEUSA","DECORTILES","ELIANE","ELIZABETH","INCEFRA","PORTINARI"], valor:440.00, tipoCalculo:"peso", adicionalGrandeFormato:true },
+  { nome:"FONTANELLA (ANDERSON)", origem:"Criciúma/Urussanga - SC", marcas:["CEUSA","DECORTILES","ELIANE","ELIZABETH","INCEFRA","PORTINARI"], valor:470.00, tipoCalculo:"peso", adicionalGrandeFormato:false },
+  { nome:"RD - ROSSO E DENEZ - ROTA GOIAS (LEONARDO)", origem:"Criciúma/Urussanga - SC", marcas:["CEUSA","DECORTILES","ELIANE","ELIZABETH","INCEFRA","PORTINARI"], valor:470.00, tipoCalculo:"peso", adicionalGrandeFormato:false },
+
+  { nome:"RAVANELLI TRANSPORTES (ARLINDO)", origem:"São Paulo", marcas:["ATLAS CERÂMICA","CARMELO FIOR","DELTA","GAUDI/ALMEIDA","LEF/VIA ROSA","INCEFRA"], valor:210.00, tipoCalculo:"peso", adicionalGrandeFormato:false },
+  { nome:"FONTANELLA (GEOVAGNER)", origem:"São Paulo", marcas:["ATLAS CERÂMICA","CARMELO FIOR","DELTA","GAUDI/ALMEIDA","LEF/VIA ROSA","INCEFRA"], valor:220.00, tipoCalculo:"peso", adicionalGrandeFormato:false },
+  { nome:"RD - ROSSO E DENEZ - ROTA GOIAS (LEONARDO)", origem:"São Paulo", marcas:["ATLAS CERÂMICA","CARMELO FIOR","DELTA","GAUDI/ALMEIDA","LEF/VIA ROSA","INCEFRA"], valor:280.00, tipoCalculo:"peso", adicionalGrandeFormato:false },
+  { nome:"DOSANJOS TRANSPORTES (LAÍS)", origem:"São Paulo", marcas:["ATLAS CERÂMICA","CARMELO FIOR","DELTA","GAUDI/ALMEIDA","LEF/VIA ROSA","INCEFRA"], valor:245.00, tipoCalculo:"peso", adicionalGrandeFormato:false },
+
+  { nome:"RAVANELLI TRANSPORTES", origem:"Botucatu - SP", marcas:["PORTINARI"], valor:260.00, tipoCalculo:"peso", adicionalGrandeFormato:false },
+  { nome:"UNIVERSO TRANSPORTES - 3BF (DANILO BONGIOLO)", origem:"Botucatu - SP", marcas:["PORTINARI"], valor:270.00, tipoCalculo:"peso", adicionalGrandeFormato:true },
+  { nome:"DOSANJOS TRANSPORTES (LAÍS)", origem:"Botucatu - SP", marcas:["PORTINARI"], valor:310.00, tipoCalculo:"peso", adicionalGrandeFormato:false },
+  { nome:"RD - ROSSO E DENEZ - ROTA GOIAS (LEONARDO)", origem:"Botucatu - SP", marcas:["PORTINARI"], valor:320.00, tipoCalculo:"peso", adicionalGrandeFormato:false },
+
+  { nome:"TRANSPORTE MARTINS - TRANSCARVALHO (THIAGO)", origem:"Biancogres", marcas:["BIANCOGRES"], valor:310.00, tipoCalculo:"peso", adicionalGrandeFormato:false },
+  { nome:"RD - ROSSO E DENEZ - ROTA GOIAS (LEONARDO)", origem:"Biancogres", marcas:["BIANCOGRES"], valor:340.00, tipoCalculo:"peso", adicionalGrandeFormato:false },
+
+  { nome:"STR TRANSPORTES", origem:"Portobello", marcas:["PORTOBELLO"], valor:495.00, tipoCalculo:"pallet", adicionalGrandeFormato:true,
+    valorPallet:495.00,
+    gruposPallet:[
+      { formatos:"120x240, 120x260, 120x270, 160x320", pesoPallet:4725 },
+      { formatos:"90x180, 160x160", pesoPallet:2420 }
+    ]
+  },
+  { nome:"UNIVERSO TRANSPORTES (3BF)", origem:"Portobello", marcas:["PORTOBELLO"], valor:440.00, tipoCalculo:"peso", adicionalGrandeFormato:true }
+];
+
+let usuarioAtual = null;
+let transportadoras = [];
+let gruposPalletTemp = [];
+
+/* ---------------------- LOGIN ---------------------- */
+function preencherSelectUsuarios(){
+  const sel = document.getElementById('login-usuario');
+  USUARIOS.forEach(u=>{
+    const opt = document.createElement('option');
+    opt.value = u.nome;
+    opt.textContent = u.nome;
+    sel.appendChild(opt);
+  });
+}
+preencherSelectUsuarios();
+
+function abrirLoginModal(){
+  document.getElementById('login-erro').textContent = '';
+  document.getElementById('login-senha').value = '';
+  document.getElementById('tela-login').classList.remove('oculto');
+}
+
+function fecharLoginModal(){
+  document.getElementById('tela-login').classList.add('oculto');
+}
+
+function fazerLogin(){
+  const nome = document.getElementById('login-usuario').value;
+  const senha = document.getElementById('login-senha').value;
+  const erroEl = document.getElementById('login-erro');
+  const usuario = USUARIOS.find(u=>u.nome===nome);
+  if(!usuario){ erroEl.textContent = "Selecione um usuário."; return; }
+  if(usuario.senha !== senha){ erroEl.textContent = "Senha incorreta."; return; }
+  erroEl.textContent = "";
+  usuarioAtual = usuario;
+  sessionStorage.setItem('frete_usuario', JSON.stringify(usuario));
+  fecharLoginModal();
+  entrarComoAdm();
+}
+
+function fazerLogout(){
+  usuarioAtual = null;
+  sessionStorage.removeItem('frete_usuario');
+  document.getElementById('user-box-logado').classList.add('oculto');
+  document.getElementById('user-box-anonimo').classList.remove('oculto');
+  document.getElementById('tab-btn-adm').classList.add('oculto');
+  document.getElementById('tab-btn-log').classList.add('oculto');
+  mostrarAba('calc');
+}
+
+function entrarComoAdm(){
+  document.getElementById('user-box-anonimo').classList.add('oculto');
+  document.getElementById('user-box-logado').classList.remove('oculto');
+  document.getElementById('usuario-logado').innerHTML =
+    usuarioAtual.nome + (usuarioAtual.adm ? '<span class="badge-adm">ADM</span>' : '');
+  document.getElementById('tab-btn-adm').classList.remove('oculto');
+  document.getElementById('tab-btn-log').classList.remove('oculto');
+  carregarLogs();
+}
+
+// a calculadora é liberada para todos; a sessão ADM (se houver) é restaurada aqui
+(function restaurarSessao(){
+  const salvo = sessionStorage.getItem('frete_usuario');
+  if(salvo){
+    usuarioAtual = JSON.parse(salvo);
+    entrarComoAdm();
+  }
+})();
+
+// dados da calculadora carregam direto, sem exigir login
+carregarTransportadoras();
+
+/* ---------------------- NAVEGAÇÃO ENTRE ABAS ---------------------- */
+function mostrarAba(aba){
+  ['calc','adm','log'].forEach(a=>{
+    document.getElementById('aba-'+a).classList.toggle('oculto', a!==aba);
+    document.getElementById('tab-btn-'+a).classList.toggle('ativo', a===aba);
+  });
+}
+
+/* ---------------------- FIRESTORE: TRANSPORTADORAS ---------------------- */
+async function carregarTransportadoras(){
+  const snap = await db.collection('transportadoras').get();
+  if(snap.empty){
+    // primeira vez: semeia os dados extraídos da tabela original
+    const batch = db.batch();
+    SEED_TRANSPORTADORAS.forEach(t=>{
+      const ref = db.collection('transportadoras').doc();
+      batch.set(ref, t);
+    });
+    await batch.commit();
+    await registrarLog('Sistema', 'Dados iniciais carregados', SEED_TRANSPORTADORAS.length + ' transportadoras importadas da tabela original');
+    return carregarTransportadoras();
+  }
+  transportadoras = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  popularMarcas();
+  renderizarListaAdm();
+}
+
+function popularMarcas(){
+  const marcas = new Set();
+  transportadoras.forEach(t=> (t.marcas||[]).forEach(m=>marcas.add(m)));
+  const sel = document.getElementById('calc-marca');
+  const valorAtual = sel.value;
+  sel.innerHTML = '<option value="">Selecione a marca...</option>';
+  [...marcas].sort().forEach(m=>{
+    const opt = document.createElement('option');
+    opt.value = m; opt.textContent = m;
+    sel.appendChild(opt);
+  });
+  if(valorAtual) sel.value = valorAtual;
+}
+
+/* ---------------------- CALCULADORA ---------------------- */
+function aoSelecionarMarca(){
+  const marca = document.getElementById('calc-marca').value;
+  const selTransp = document.getElementById('calc-transportadora');
+  selTransp.innerHTML = '';
+  resetarResultado();
+  if(!marca){
+    selTransp.innerHTML = '<option value="">Selecione a marca primeiro</option>';
+    selTransp.disabled = true;
+    document.getElementById('btn-calcular').disabled = true;
+    return;
+  }
+  const disponiveis = transportadoras.filter(t=> (t.marcas||[]).includes(marca));
+  selTransp.innerHTML = '<option value="">Selecione a transportadora...</option>';
+  disponiveis.forEach(t=>{
+    const opt = document.createElement('option');
+    opt.value = t.id;
+    opt.textContent = t.nome + ' — R$ ' + Number(t.valor).toFixed(2) + ' (' + t.origem + ')';
+    selTransp.appendChild(opt);
+  });
+  selTransp.disabled = false;
+}
+
+function aoSelecionarTransportadora(){
+  const id = document.getElementById('calc-transportadora').value;
+  resetarResultado();
+  document.getElementById('bloco-peso').classList.add('oculto');
+  document.getElementById('bloco-pallet').classList.add('oculto');
+  document.getElementById('btn-calcular').disabled = true;
+  if(!id) return;
+  const t = transportadoras.find(x=>x.id===id);
+  if(!t) return;
+  if(t.tipoCalculo === 'pallet'){
+    const selFormato = document.getElementById('calc-formato-pallet');
+    selFormato.innerHTML = '';
+    (t.gruposPallet||[]).forEach((g,i)=>{
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = g.formatos + ' (1 pallet = ' + g.pesoPallet + ' kg)';
+      selFormato.appendChild(opt);
+    });
+    document.getElementById('bloco-pallet').classList.remove('oculto');
+    document.getElementById('calc-formato-grande-pallet').parentElement.classList.toggle('oculto', !t.adicionalGrandeFormato);
+  } else {
+    document.getElementById('bloco-peso').classList.remove('oculto');
+    document.getElementById('calc-formato-grande').parentElement.classList.toggle('oculto', !t.adicionalGrandeFormato);
+  }
+  document.getElementById('btn-calcular').disabled = false;
+}
+
+function resetarResultado(){
+  document.getElementById('resultado').classList.add('oculto');
+}
+
+function calcularFrete(){
+  const marca = document.getElementById('calc-marca').value;
+  const id = document.getElementById('calc-transportadora').value;
+  const t = transportadoras.find(x=>x.id===id);
+  if(!t) return;
+
+  let valorFinal = 0;
+  let detalhe = '';
+
+  if(t.tipoCalculo === 'pallet'){
+    const idxGrupo = document.getElementById('calc-formato-pallet').value;
+    const grupo = t.gruposPallet[idxGrupo];
+    const pesoPedido = parseFloat(document.getElementById('calc-peso-pedido').value);
+    if(!grupo || isNaN(pesoPedido) || pesoPedido<=0){
+      alert('Informe o peso total do pedido.');
+      return;
+    }
+    const numPallets = Math.ceil(pesoPedido / grupo.pesoPallet);
+    valorFinal = numPallets * t.valorPallet;
+    const grande = document.getElementById('calc-formato-grande-pallet').checked;
+    if(grande && t.adicionalGrandeFormato) valorFinal *= 1.02;
+    detalhe = numPallets + ' pallet(s) × R$ ' + Number(t.valorPallet).toFixed(2) +
+      (grande ? ' + 2% formato grande' : '') +
+      ' · formato: ' + grupo.formatos;
+  } else {
+    const peso = parseFloat(document.getElementById('calc-peso').value);
+    if(isNaN(peso) || peso<=0){
+      alert('Informe o peso (kg/m²).');
+      return;
+    }
+    valorFinal = peso * (t.valor/1000);
+    const grande = document.getElementById('calc-formato-grande').checked;
+    if(grande && t.adicionalGrandeFormato) valorFinal *= 1.02;
+    detalhe = peso.toFixed(2) + ' kg/m² × (R$ ' + Number(t.valor).toFixed(2) + ' ÷ 1000)' +
+      (grande ? ' + 2% formato grande' : '');
+  }
+
+  document.getElementById('resultado-valor').textContent = 'R$ ' + valorFinal.toFixed(2).replace('.', ',');
+  document.getElementById('resultado-detalhe').textContent =
+    marca + ' · ' + t.nome + ' · ' + detalhe;
+  document.getElementById('resultado').classList.remove('oculto');
+}
+
+/* ---------------------- ADM: LISTA / CRUD ---------------------- */
+function renderizarListaAdm(){
+  const cont = document.getElementById('lista-transportadoras');
+  if(transportadoras.length===0){
+    cont.innerHTML = '<p class="status">Nenhuma transportadora cadastrada ainda.</p>';
+    return;
+  }
+  cont.innerHTML = '';
+  transportadoras.forEach(t=>{
+    const div = document.createElement('div');
+    div.className = 'lista-remover';
+    const marcasHtml = (t.marcas||[]).map(m=>'<span class="tag-pill">'+m+'</span>').join('');
+    div.innerHTML = `
+      <div>
+        <strong>${t.nome}</strong> — ${t.origem}<br>
+        ${t.tipoCalculo==='pallet' ? 'Por pallet · R$ '+Number(t.valorPallet).toFixed(2) : 'Por peso · R$ '+Number(t.valor).toFixed(2)}
+        ${t.adicionalGrandeFormato ? ' · +2% formato grande' : ''}<br>
+        ${marcasHtml}
+      </div>
+      <div>
+        <button class="btn secundario pequeno" onclick="editarTransportadora('${t.id}')">Editar</button>
+        <button class="btn perigo pequeno" onclick="removerTransportadora('${t.id}')">Remover</button>
+      </div>
+    `;
+    cont.appendChild(div);
+  });
+}
+
+function alternarTipoCalculoForm(){
+  const tipo = document.getElementById('f-tipo-calculo').value;
+  document.getElementById('f-bloco-peso').classList.toggle('oculto', tipo!=='peso');
+  document.getElementById('f-bloco-pallet').classList.toggle('oculto', tipo!=='pallet');
+}
+
+function adicionarGrupoPallet(formatos, pesoPallet){
+  const idx = gruposPalletTemp.length;
+  gruposPalletTemp.push({formatos: formatos||'', pesoPallet: pesoPallet||''});
+  renderizarGruposPalletForm();
+}
+
+function renderizarGruposPalletForm(){
+  const cont = document.getElementById('f-grupos-pallet');
+  cont.innerHTML = '';
+  gruposPalletTemp.forEach((g,i)=>{
+    const div = document.createElement('div');
+    div.className = 'grupo-pallet';
+    div.innerHTML = `
+      <label>Formatos (separados por vírgula)</label>
+      <input type="text" value="${g.formatos}" onchange="gruposPalletTemp[${i}].formatos=this.value">
+      <label>Peso por pallet (kg)</label>
+      <input type="number" value="${g.pesoPallet}" onchange="gruposPalletTemp[${i}].pesoPallet=parseFloat(this.value)">
+      <button type="button" class="btn perigo pequeno" style="margin-top:8px" onclick="removerGrupoPallet(${i})">Remover grupo</button>
+    `;
+    cont.appendChild(div);
+  });
+}
+
+function removerGrupoPallet(i){
+  gruposPalletTemp.splice(i,1);
+  renderizarGruposPalletForm();
+}
+
+function limparFormulario(){
+  document.getElementById('edit-id').value = '';
+  document.getElementById('f-nome').value = '';
+  document.getElementById('f-origem').value = '';
+  document.getElementById('f-marcas').value = '';
+  document.getElementById('f-tipo-calculo').value = 'peso';
+  document.getElementById('f-valor').value = '';
+  document.getElementById('f-valor-pallet').value = '';
+  document.getElementById('f-adicional-grande').checked = false;
+  gruposPalletTemp = [];
+  renderizarGruposPalletForm();
+  alternarTipoCalculoForm();
+  document.getElementById('form-titulo').textContent = 'Adicionar transportadora';
+}
+
+function editarTransportadora(id){
+  const t = transportadoras.find(x=>x.id===id);
+  if(!t) return;
+  document.getElementById('edit-id').value = t.id;
+  document.getElementById('f-nome').value = t.nome;
+  document.getElementById('f-origem').value = t.origem;
+  document.getElementById('f-marcas').value = (t.marcas||[]).join(', ');
+  document.getElementById('f-tipo-calculo').value = t.tipoCalculo;
+  document.getElementById('f-valor').value = t.valor || '';
+  document.getElementById('f-valor-pallet').value = t.valorPallet || '';
+  document.getElementById('f-adicional-grande').checked = !!t.adicionalGrandeFormato;
+  gruposPalletTemp = t.gruposPallet ? JSON.parse(JSON.stringify(t.gruposPallet)) : [];
+  renderizarGruposPalletForm();
+  alternarTipoCalculoForm();
+  document.getElementById('form-titulo').textContent = 'Editando: ' + t.nome;
+  window.scrollTo({top: document.getElementById('form-titulo').offsetTop - 20, behavior:'smooth'});
+}
+
+async function salvarTransportadora(){
+  const id = document.getElementById('edit-id').value;
+  const nome = document.getElementById('f-nome').value.trim();
+  const origem = document.getElementById('f-origem').value.trim();
+  const marcas = document.getElementById('f-marcas').value.split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
+  const tipoCalculo = document.getElementById('f-tipo-calculo').value;
+  const adicionalGrandeFormato = document.getElementById('f-adicional-grande').checked;
+
+  if(!nome || !origem || marcas.length===0){
+    alert('Preencha nome, origem e ao menos uma marca.');
+    return;
+  }
+
+  const dados = { nome, origem, marcas, tipoCalculo, adicionalGrandeFormato };
+
+  if(tipoCalculo === 'peso'){
+    const valor = parseFloat(document.getElementById('f-valor').value);
+    if(isNaN(valor)){ alert('Informe o valor da transportadora.'); return; }
+    dados.valor = valor;
+  } else {
+    const valorPallet = parseFloat(document.getElementById('f-valor-pallet').value);
+    if(isNaN(valorPallet) || gruposPalletTemp.length===0){
+      alert('Informe o valor por pallet e ao menos um grupo de formato.');
+      return;
+    }
+    dados.valorPallet = valorPallet;
+    dados.valor = valorPallet;
+    dados.gruposPallet = gruposPalletTemp;
+  }
+
+  if(id){
+    await db.collection('transportadoras').doc(id).set(dados);
+    await registrarLog(usuarioAtual.nome, 'Editou transportadora', nome);
+  } else {
+    await db.collection('transportadoras').add(dados);
+    await registrarLog(usuarioAtual.nome, 'Adicionou transportadora', nome);
+  }
+  limparFormulario();
+  carregarTransportadoras();
+}
+
+async function removerTransportadora(id){
+  const t = transportadoras.find(x=>x.id===id);
+  if(!t) return;
+  if(!confirm('Remover "'+t.nome+'"? Essa ação não pode ser desfeita.')) return;
+  await db.collection('transportadoras').doc(id).delete();
+  await registrarLog(usuarioAtual.nome, 'Removeu transportadora', t.nome);
+  carregarTransportadoras();
+}
+
+/* ---------------------- LOGS ---------------------- */
+async function registrarLog(usuario, acao, detalhe){
+  await db.collection('logs').add({
+    usuario, acao, detalhe,
+    dataHora: new Date().toISOString()
+  });
+}
+
+async function carregarLogs(){
+  const snap = await db.collection('logs').orderBy('dataHora','desc').limit(100).get();
+  const corpo = document.getElementById('tabela-logs');
+  corpo.innerHTML = '';
+  snap.forEach(doc=>{
+    const l = doc.data();
+    const dt = new Date(l.dataHora);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${dt.toLocaleString('pt-BR')}</td><td>${l.usuario}</td><td>${l.acao}</td><td>${l.detalhe}</td>`;
+    corpo.appendChild(tr);
+  });
+}
+
+alternarTipoCalculoForm();
+</script>
+</body>
+</html>
