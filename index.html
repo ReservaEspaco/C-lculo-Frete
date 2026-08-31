@@ -338,6 +338,15 @@
   </div>
 </div>
 
+<!-- ===================== MODAL DE DETALHE DO LOG ===================== -->
+<div id="tela-detalhe-log" class="login-wrap oculto" style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:100;">
+  <div class="login-card" style="max-width:480px;max-height:80vh;overflow-y:auto;text-align:left;">
+    <h1 style="text-align:left;">Detalhe da alteração</h1>
+    <div id="log-detalhe-conteudo" style="font-size:14px;line-height:1.5;"></div>
+    <button class="btn secundario" style="margin-top:16px;width:100%;" onclick="fecharDetalheLog()">Fechar</button>
+  </div>
+</div>
+
 <!-- ===================== APP PRINCIPAL ===================== -->
 <div id="app">
   <header>
@@ -417,7 +426,9 @@
     <div id="aba-adm" class="oculto">
       <div class="card">
         <h2>Transportadoras cadastradas</h2>
-        <div id="lista-transportadoras"></div>
+        <button class="btn secundario" onclick="importarDadosIniciais()">Importar dados da tabela original</button>
+        <div class="status" style="margin-top:6px;">Importa só o que ainda não está cadastrado — não duplica o que você já adicionou.</div>
+        <div id="lista-transportadoras" style="margin-top:16px;"></div>
       </div>
 
       <div class="card">
@@ -697,20 +708,29 @@ function mostrarAba(aba){
 /* ---------------------- FIRESTORE: TRANSPORTADORAS ---------------------- */
 async function carregarTransportadoras(){
   const snap = await db.collection('transportadoras').get();
-  if(snap.empty){
-    // primeira vez: semeia os dados extraídos da tabela original
-    const batch = db.batch();
-    SEED_TRANSPORTADORAS.forEach(t=>{
-      const ref = db.collection('transportadoras').doc();
-      batch.set(ref, t);
-    });
-    await batch.commit();
-    await registrarLog('Sistema', 'Dados iniciais carregados', SEED_TRANSPORTADORAS.length + ' transportadoras importadas da tabela original');
-    return carregarTransportadoras();
-  }
   transportadoras = snap.docs.map(d=>({id:d.id, ...d.data()}));
   popularMarcas();
   renderizarListaAdm();
+}
+
+async function importarDadosIniciais(){
+  const existentes = new Set(transportadoras.map(t => (t.nome+'|'+t.origem).toUpperCase()));
+  const faltando = SEED_TRANSPORTADORAS.filter(t => !existentes.has((t.nome+'|'+t.origem).toUpperCase()));
+
+  if(faltando.length === 0){
+    alert('Todas as transportadoras da tabela original já estão cadastradas.');
+    return;
+  }
+  if(!confirm('Isso vai importar ' + faltando.length + ' transportadora(s) que ainda não estão cadastradas. Continuar?')) return;
+
+  const batch = db.batch();
+  faltando.forEach(t=>{
+    const ref = db.collection('transportadoras').doc();
+    batch.set(ref, t);
+  });
+  await batch.commit();
+  await registrarLog(usuarioAtual.nome, 'Importou dados iniciais', faltando.length + ' transportadora(s): ' + faltando.map(t=>t.nome).join(', '), {transportadoras: faltando});
+  carregarTransportadoras();
 }
 
 function popularMarcas(){
@@ -951,10 +971,10 @@ async function salvarTransportadora(){
 
   if(id){
     await db.collection('transportadoras').doc(id).set(dados);
-    await registrarLog(usuarioAtual.nome, 'Editou transportadora', nome);
+    await registrarLog(usuarioAtual.nome, 'Editou transportadora', nome, dados);
   } else {
     await db.collection('transportadoras').add(dados);
-    await registrarLog(usuarioAtual.nome, 'Adicionou transportadora', nome);
+    await registrarLog(usuarioAtual.nome, 'Adicionou transportadora', nome, dados);
   }
   limparFormulario();
   carregarTransportadoras();
@@ -965,29 +985,74 @@ async function removerTransportadora(id){
   if(!t) return;
   if(!confirm('Remover "'+t.nome+'"? Essa ação não pode ser desfeita.')) return;
   await db.collection('transportadoras').doc(id).delete();
-  await registrarLog(usuarioAtual.nome, 'Removeu transportadora', t.nome);
+  await registrarLog(usuarioAtual.nome, 'Removeu transportadora', t.nome, t);
   carregarTransportadoras();
 }
 
 /* ---------------------- LOGS ---------------------- */
-async function registrarLog(usuario, acao, detalhe){
-  await db.collection('logs').add({
-    usuario, acao, detalhe,
-    dataHora: new Date().toISOString()
-  });
+let logsCache = [];
+
+async function registrarLog(usuario, acao, detalhe, dadosCompletos){
+  const entrada = { usuario, acao, detalhe, dataHora: new Date().toISOString() };
+  if(dadosCompletos) entrada.dadosCompletos = dadosCompletos;
+  await db.collection('logs').add(entrada);
 }
 
 async function carregarLogs(){
   const snap = await db.collection('logs').orderBy('dataHora','desc').limit(100).get();
+  logsCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
   const corpo = document.getElementById('tabela-logs');
   corpo.innerHTML = '';
-  snap.forEach(doc=>{
-    const l = doc.data();
+  logsCache.forEach((l,i)=>{
     const dt = new Date(l.dataHora);
     const tr = document.createElement('tr');
+    tr.style.cursor = 'pointer';
+    tr.title = 'Toque para ver os detalhes completos';
     tr.innerHTML = `<td>${dt.toLocaleString('pt-BR')}</td><td>${l.usuario}</td><td>${l.acao}</td><td>${l.detalhe}</td>`;
+    tr.onclick = ()=>verDetalheLog(i);
     corpo.appendChild(tr);
   });
+}
+
+function verDetalheLog(i){
+  const l = logsCache[i];
+  const dt = new Date(l.dataHora);
+  let html = `<p><strong>Usuário:</strong> ${l.usuario}</p>`;
+  html += `<p><strong>Data/hora:</strong> ${dt.toLocaleString('pt-BR')}</p>`;
+  html += `<p><strong>Ação:</strong> ${l.acao}</p>`;
+  html += `<p><strong>Resumo:</strong> ${l.detalhe}</p>`;
+  if(l.dadosCompletos){
+    html += '<hr style="border:none;border-top:1px solid var(--borda);margin:12px 0;">';
+    html += '<p><strong>Dados completos:</strong></p>';
+    html += formatarDadosLog(l.dadosCompletos);
+  }
+  document.getElementById('log-detalhe-conteudo').innerHTML = html;
+  document.getElementById('tela-detalhe-log').classList.remove('oculto');
+}
+
+function fecharDetalheLog(){
+  document.getElementById('tela-detalhe-log').classList.add('oculto');
+}
+
+function formatarDadosLog(d){
+  // suporta tanto uma transportadora única quanto uma lista (importação em lote)
+  const lista = Array.isArray(d.transportadoras) ? d.transportadoras : [d];
+  return lista.map(t=>{
+    let linhas = `<div class="grupo-pallet">`;
+    linhas += `<strong>${t.nome||''}</strong> — ${t.origem||''}<br>`;
+    linhas += `Marcas: ${(t.marcas||[]).join(', ')}<br>`;
+    if(t.tipoCalculo === 'pallet'){
+      linhas += `Cálculo por pallet · Valor por pallet: R$ ${Number(t.valorPallet||0).toFixed(2)}<br>`;
+      (t.gruposPallet||[]).forEach(g=>{
+        linhas += `&nbsp;&nbsp;· ${g.formatos}: 1 pallet = ${g.pesoPallet} kg<br>`;
+      });
+    } else {
+      linhas += `Cálculo por peso · Valor: R$ ${Number(t.valor||0).toFixed(2)}<br>`;
+    }
+    linhas += `Adicional formato grande (2%): ${t.adicionalGrandeFormato ? 'Sim' : 'Não'}`;
+    linhas += `</div>`;
+    return linhas;
+  }).join('');
 }
 
 alternarTipoCalculoForm();
