@@ -321,6 +321,23 @@
   </div>
 </div>
 
+<!-- ===================== MODAL DE TROCA DE SENHA ===================== -->
+<div id="tela-trocar-senha" class="login-wrap oculto" style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:100;">
+  <div class="login-card">
+    <h1>Trocar senha</h1>
+    <p id="trocar-senha-usuario"></p>
+    <label>Senha atual</label>
+    <input type="password" id="ts-senha-atual" placeholder="Digite sua senha atual">
+    <label>Nova senha</label>
+    <input type="password" id="ts-senha-nova" placeholder="Digite a nova senha">
+    <label>Confirmar nova senha</label>
+    <input type="password" id="ts-senha-confirma" placeholder="Repita a nova senha">
+    <button class="btn" onclick="salvarNovaSenha()">Salvar nova senha</button>
+    <button class="btn secundario" style="margin-top:8px" onclick="fecharTrocarSenhaModal()">Cancelar</button>
+    <div class="erro-msg" id="ts-erro"></div>
+  </div>
+</div>
+
 <!-- ===================== APP PRINCIPAL ===================== -->
 <div id="app">
   <header>
@@ -330,6 +347,7 @@
     </div>
     <div class="user-box oculto" id="user-box-logado">
       <span id="usuario-logado"></span>
+      <button onclick="abrirTrocarSenhaModal()">Trocar senha</button>
       <button onclick="fazerLogout()">Sair</button>
     </div>
   </header>
@@ -487,9 +505,12 @@ const db = firebase.firestore();
 
 /* ======================================================================
    USUÁRIOS (todos ADM)
-   Ajuste as senhas abaixo antes de publicar. Uso interno na intranet.
+   Carregados do Firestore (coleção 'usuarios'). Na primeira vez que o
+   Firestore estiver vazio, semeia com as senhas padrão abaixo — depois
+   disso, cada usuário pode trocar a própria senha pelo app.
    ====================================================================== */
-const USUARIOS = [
+let USUARIOS = [];
+const SEED_USUARIOS = [
   { nome: "Monica",   senha: "monica123",   adm: true },
   { nome: "Adelson",  senha: "adelson123",  adm: true },
   { nome: "Guilherme",senha: "guilherme123",adm: true },
@@ -536,8 +557,29 @@ let transportadoras = [];
 let gruposPalletTemp = [];
 
 /* ---------------------- LOGIN ---------------------- */
+async function carregarUsuarios(){
+  const snap = await db.collection('usuarios').get();
+  if(snap.empty){
+    const batch = db.batch();
+    SEED_USUARIOS.forEach(u=>{
+      const ref = db.collection('usuarios').doc();
+      batch.set(ref, u);
+    });
+    await batch.commit();
+    return carregarUsuarios();
+  }
+  USUARIOS = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  preencherSelectUsuarios();
+  // se a sessão já tinha sido restaurada antes dos dados carregarem, resincroniza (pega o id do documento)
+  if(usuarioAtual){
+    const atualizado = USUARIOS.find(u=>u.nome===usuarioAtual.nome);
+    if(atualizado) usuarioAtual = atualizado;
+  }
+}
+
 function preencherSelectUsuarios(){
   const sel = document.getElementById('login-usuario');
+  sel.innerHTML = '<option value="">Selecione...</option>';
   USUARIOS.forEach(u=>{
     const opt = document.createElement('option');
     opt.value = u.nome;
@@ -545,7 +587,6 @@ function preencherSelectUsuarios(){
     sel.appendChild(opt);
   });
 }
-preencherSelectUsuarios();
 
 function abrirLoginModal(){
   document.getElementById('login-erro').textContent = '';
@@ -591,6 +632,46 @@ function entrarComoAdm(){
   carregarLogs();
 }
 
+/* ---------------------- TROCAR SENHA ---------------------- */
+function abrirTrocarSenhaModal(){
+  document.getElementById('ts-erro').textContent = '';
+  document.getElementById('ts-senha-atual').value = '';
+  document.getElementById('ts-senha-nova').value = '';
+  document.getElementById('ts-senha-confirma').value = '';
+  document.getElementById('trocar-senha-usuario').textContent = 'Usuário: ' + usuarioAtual.nome;
+  document.getElementById('tela-trocar-senha').classList.remove('oculto');
+}
+
+function fecharTrocarSenhaModal(){
+  document.getElementById('tela-trocar-senha').classList.add('oculto');
+}
+
+async function salvarNovaSenha(){
+  const erroEl = document.getElementById('ts-erro');
+  const atual = document.getElementById('ts-senha-atual').value;
+  const nova = document.getElementById('ts-senha-nova').value;
+  const confirma = document.getElementById('ts-senha-confirma').value;
+
+  if(atual !== usuarioAtual.senha){ erroEl.textContent = "Senha atual incorreta."; return; }
+  if(nova.length < 4){ erroEl.textContent = "A nova senha deve ter pelo menos 4 caracteres."; return; }
+  if(nova !== confirma){ erroEl.textContent = "As senhas novas não coincidem."; return; }
+  if(!usuarioAtual.id){ erroEl.textContent = "Aguarde o carregamento dos dados e tente de novo."; return; }
+
+  await db.collection('usuarios').doc(usuarioAtual.id).update({ senha: nova });
+  usuarioAtual.senha = nova;
+  const idx = USUARIOS.findIndex(u=>u.id===usuarioAtual.id);
+  if(idx>-1) USUARIOS[idx].senha = nova;
+  sessionStorage.setItem('frete_usuario', JSON.stringify(usuarioAtual));
+  await registrarLog(usuarioAtual.nome, 'Trocou a própria senha', '—');
+
+  erroEl.style.color = 'var(--verde-escuro)';
+  erroEl.textContent = "Senha alterada com sucesso!";
+  setTimeout(()=>{
+    erroEl.style.color = '';
+    fecharTrocarSenhaModal();
+  }, 1200);
+}
+
 // a calculadora é liberada para todos; a sessão ADM (se houver) é restaurada aqui
 (function restaurarSessao(){
   const salvo = sessionStorage.getItem('frete_usuario');
@@ -599,6 +680,8 @@ function entrarComoAdm(){
     entrarComoAdm();
   }
 })();
+
+carregarUsuarios();
 
 // dados da calculadora carregam direto, sem exigir login
 carregarTransportadoras();
