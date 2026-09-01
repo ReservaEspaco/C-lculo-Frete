@@ -513,8 +513,10 @@
         </div>
         <div class="form-inline-actions">
           <button class="btn pequeno" onclick="filtrarLogs()">Filtrar</button>
-          <button class="btn secundario pequeno" onclick="limparFiltroLogs()">Limpar filtro</button>
+          <button class="btn secundario pequeno" onclick="filtrarLogsHoje()">Só hoje</button>
+          <button class="btn secundario pequeno" onclick="limparFiltroLogs()">Ver tudo</button>
         </div>
+        <div class="status" style="margin-top:6px;">Por padrão, mostra só as alterações de hoje.</div>
         <table style="margin-top:16px;">
           <thead>
             <tr><th>Data/Hora</th><th>Usuário</th><th>Ação</th><th>Detalhe</th></tr>
@@ -684,7 +686,24 @@ function entrarComoAdm(){
     usuarioAtual.nome + (usuarioAtual.adm ? '<span class="badge-adm">ADM</span>' : '');
   document.getElementById('tab-btn-adm').classList.remove('oculto');
   document.getElementById('tab-btn-log').classList.remove('oculto');
-  carregarLogs();
+  filtrarLogsHoje();
+}
+
+function obterIntervaloHoje(){
+  const agora = new Date();
+  const ano = agora.getFullYear(), mes = agora.getMonth(), dia = agora.getDate();
+  const inicio = new Date(ano, mes, dia, 0, 0, 0);
+  const fim = new Date(ano, mes, dia, 23, 59, 59);
+  const dataStr = agora.toISOString().slice(0,10); // yyyy-mm-dd no fuso local seria melhor, mas serve para preencher o campo
+  const dataLocalStr = `${ano}-${String(mes+1).padStart(2,'0')}-${String(dia).padStart(2,'0')}`;
+  return { iniISO: inicio.toISOString(), fimISO: fim.toISOString(), dataStr: dataLocalStr };
+}
+
+function filtrarLogsHoje(){
+  const { iniISO, fimISO, dataStr } = obterIntervaloHoje();
+  document.getElementById('log-filtro-inicio').value = dataStr;
+  document.getElementById('log-filtro-fim').value = dataStr;
+  carregarLogs(iniISO, fimISO);
 }
 
 /* ---------------------- TROCAR SENHA ---------------------- */
